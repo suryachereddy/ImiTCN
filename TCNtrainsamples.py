@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader, ConcatDataset
 from util import (SingleViewTripletBuilder, distance, Logger, ensure_folder)
 from tcn import define_model
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
 
-
-
+writer = SummaryWriter()
 IMAGE_SIZE = (299, 299)
 
 def get_args():
@@ -47,7 +47,7 @@ del validation_builder
 
 def validate(tcn, use_cuda, arguments):
     # Run model on validation data and log results
-    data_loader = DataLoader(validation_set, batch_size=256, shuffle=False, pin_memory=use_cuda)
+    data_loader = DataLoader(validation_set, batch_size=32, shuffle=False, pin_memory=use_cuda)
     correct_with_margin = 0
     correct_without_margin = 0
     for minibatch, _ in data_loader:
@@ -78,6 +78,7 @@ def validate(tcn, use_cuda, arguments):
         total=len(validation_set)
     )
     logger.info(message)
+    writer.add_scalar('validation', correct_with_margin/len(validation_set), global_step=0)
 
 def model_filename(model_name, epoch):
     return "{model_name}-epoch-{epoch}.pk".format(model_name=model_name, epoch=epoch)
@@ -118,6 +119,7 @@ def main():
     use_cuda = torch.cuda.is_available()
 
     tcn = create_model(use_cuda)
+    
 
 
     #triplet_builder = SingleViewTripletBuilder(arguments.train_directory, IMAGE_SIZE, arguments, sample_size=4)
@@ -179,10 +181,10 @@ def main():
             print(f"step loss {epochloss[-1]}")
         learning_rate_scheduler.step()
         print(f"epoch loss {np.mean(epochloss)}")
+        writer.add_scalar('runs/trainloss', epochloss, epoch)
         if epoch % arguments.save_every == 0 and epoch != 0:
             logger.info('Saving model.')
             save_model(tcn, model_filename(arguments.model_name, epoch), arguments.model_folder)
-
 
 
 
