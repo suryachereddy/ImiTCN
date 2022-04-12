@@ -10,6 +10,7 @@ from torch.autograd import Variable
 import logging
 from tqdm import tqdm
 from scipy.ndimage import rotate
+import random
 
 def distance(x1, x2):
     diff = torch.abs(x1 - x2)
@@ -85,6 +86,7 @@ class SingleViewTripletBuilder(object):
         self._video_directory = video_directory
         filenames = ls(video_directory)
         self.video_paths = [os.path.join(self._video_directory, f) for f in filenames]
+        random.shuffle(self.video_paths)
         self.video_count = len(self.video_paths)
 
     def _count_frames(self):
