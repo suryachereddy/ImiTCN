@@ -1,3 +1,4 @@
+from ntpath import join
 import os
 import functools
 import imageio
@@ -69,9 +70,12 @@ def ls(path):
     return [p for p in os.listdir(path) if p[0] != '.']
 
 class SingleViewTripletBuilder(object):
-    def __init__(self, video_directory, image_size, cli_args, sample_size=500):
+    def __init__(self, video_directory, image_size, cli_args, sample_size=500, withjoints=True):
         self.frame_size = image_size
-        self._read_video_dir(video_directory)
+        if withjoints:
+            self._read_video_and_joint_dir(video_directory)
+        else:
+            self._read_video_dir(video_directory)
 
         self._count_frames()
         # The negative example has to be from outside the buffer window. Taken from both sides of
@@ -81,6 +85,17 @@ class SingleViewTripletBuilder(object):
         self.video_index = 0
         self.cli_args = cli_args
         self.sample_size = sample_size
+
+    def _read_video_and_joint_dir(self, video_directory, video_pre="video_", joint_pre="joint_",total=80):
+        totallist=[i for i in range(total)]
+        random.shuffle(totallist)
+        videofilenames=["video_"+str(i)+".npy" for i in totallist]
+        jointfilenames=["joint_"+str(i)+".npy" for i in totallist]
+        self.video_paths = [os.path.join(video_directory, f) for f in videofilenames]
+        self.joint_paths = [os.path.join(video_directory, f) for f in jointfilenames]
+        self.video_count = len(self.video_paths)
+
+        
 
     def _read_video_dir(self, video_directory):
         self._video_directory = video_directory
@@ -102,29 +117,42 @@ class SingleViewTripletBuilder(object):
     def get_video(self, index):
         return read_video(self.video_paths[index], self.frame_size)
 
-    def sample_triplet(self, snap):
+    def get_joint(self,index):
+        return np.load(self.joint_paths[index])
+
+    def sample_triplet(self, snap,jointsnap):
         anchor_index = self.sample_anchor_frame_index()
         positive_index = self.sample_positive_frame_index(anchor_index)
         negative_index = self.sample_negative_frame_index(anchor_index)
+        
         anchor_frame = snap[anchor_index]
         positive_frame = snap[positive_index]
         negative_frame = snap[negative_index]
+        anchor_joint = jointsnap[anchor_index]
+        positive_joint = jointsnap[positive_index]
+        negative_joint = jointsnap[negative_index]
+
         return (torch.Tensor(anchor_frame), torch.Tensor(positive_frame),
-            torch.Tensor(negative_frame))
+            torch.Tensor(negative_frame),torch.Tensor(anchor_joint),torch.Tensor(positive_joint),torch.Tensor(negative_joint))
 
     def build_set(self):
         triplets = []
         triplets = torch.Tensor(self.sample_size, 3, 3, *self.frame_size)
+        joints=torch.Tensor(self.sample_size,3,7)
         for i in range(0, self.sample_size):
             snap = self.get_video(self.video_index)
-            anchor_frame, positive_frame, negative_frame = self.sample_triplet(snap)
+            jointsnap = self.get_joint(self.video_index)
+            anchor_frame, positive_frame, negative_frame, anchor_joint, positive_joint, negative_joint = self.sample_triplet(snap,jointsnap)
             triplets[i, 0, :, :, :] = anchor_frame
             triplets[i, 1, :, :, :] = positive_frame
             triplets[i, 2, :, :, :] = negative_frame
+            joints[i,0,:]=anchor_joint
+            joints[i,1,:]=positive_joint
+            joints[i,2,:]=negative_joint
 
         self.video_index = (self.video_index + 1) % self.video_count
         # Second argument is labels. Not used.
-        return TensorDataset(triplets, torch.zeros(triplets.size()[0]))
+        return TensorDataset(triplets, joints)
 
     def sample_anchor_frame_index(self):
         arange = np.arange(0, self.frame_lengths[self.video_index])
