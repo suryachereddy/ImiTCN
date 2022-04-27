@@ -32,14 +32,14 @@ def get_args():
 def main():
     arguments=get_args()
     samplesize=200
-    triplet_builder = SingleViewTripletBuilder("./data/train/", IMAGE_SIZE, arguments, sample_size=200)
+    triplet_builder = SingleViewTripletBuilder("./data/validation/", IMAGE_SIZE, arguments, sample_size=200)
     videos=triplet_builder.video_count
     print(videos)
     for i in tqdm(range((videos*5)//samplesize)):
         
         
         dataset = triplet_builder.build_set()
-        torch.save(dataset,"./data/train_triplets/triplets_"+str(i))
+        torch.save(dataset,"./data/validation_triplets/triplets_"+str(i))
 
 
 
